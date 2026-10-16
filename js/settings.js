@@ -43,9 +43,11 @@ export const DEFAULTS = {
   defaultSort: { field: 'recent', dir: 'desc' },   // applies to any shelf / set without its own saved sort
   publicLibrary: null,  // chosen OverDrive/Libby library: { name, key, fid, city, region }
   sorts: {},            // per context: 'shelf:all' | 'shelf:reading|want|finished' | 'shelf:<shelfId>' | 'set:<setId>' → { field, dir }
+  setGroups: {},        // v0.5.8, per view: 'shelf:all' | 'shelf:<status|shelfId>' → true (series grouped into sets) | false (books shown individually); absent = the global groupSets default
   groupBy: 'status',    // All view: 'status' | 'none' (flat) | 'series' | 'author' | 'type'
   footerPages: true,    // reader footer: "Page X of Y"
   footerLeft: true,     // reader footer: "N pages left in chapter"
+  hideScrub: false,     // hide the reading-progress slider at the bottom of the reader (percent, pages left and Page X of Y stay); per-book override like the other reading prefs (v0.5.8)
   groupSets: true,
   audioChip: 'all',     // Audiobooks tab: selected shelf chip (device-only)
   audioSpeed: 1,        // last playback speed (0.5-3x); each audiobook also remembers its own
@@ -56,19 +58,19 @@ export const DEFAULTS = {
   proxyMode: 'fallback', // 'fallback' (direct first) | 'always' | 'never'
 };
 
-export const SYNCED = ['theme', 'fontSizePt', 'font', 'lineHeight', 'margin', 'flow', 'tapZones', 'view', 'sort', 'lastAutoSort', 'groupSets', 'groupBy', 'footerPages', 'footerLeft', 'showFinished', 'setSort', 'defaultSort', 'sorts', 'publicLibrary', 'autoEnrich', 'autoPair', 'wordLookup', 'wordHoldSec', 'glossaryHighlight'];
+export const SYNCED = ['theme', 'fontSizePt', 'font', 'lineHeight', 'margin', 'flow', 'tapZones', 'view', 'sort', 'lastAutoSort', 'groupSets', 'setGroups', 'groupBy', 'footerPages', 'footerLeft', 'hideScrub', 'showFinished', 'setSort', 'defaultSort', 'sorts', 'publicLibrary', 'autoEnrich', 'autoPair', 'wordLookup', 'wordHoldSec', 'glossaryHighlight'];
 /* ---------- cross-device sync of settings (v0.5.5): every preference is synced with its own last-write-wins stamp ---------- */
 /** Never synced: they describe this device / this moment rather than a preference. */
 export const DEVICE_ONLY = ['flowChosen', 'chip', 'audioChip', 'proxyUrl', 'proxyMode', 'fullscreen'];
 /** Groups the user can keep device-specific in Settings → Sync (e.g. different page flow or pinch speed on a phone and a tablet). */
 export const SETTING_GROUPS = [
   { id: 'appearance', name: 'Appearance', hint: 'theme, font, text size, line spacing, margins', keys: ['theme', 'fontSizePt', 'font', 'lineHeight', 'margin', 'pdfInvert'] },
-  { id: 'reading', name: 'Reading behaviour', hint: 'Pages / Scroll, tap zones, footer, pinch, hold time', keys: ['flow', 'tapZones', 'footerPages', 'footerLeft', 'pinchSens', 'holdSec', 'wordLookup', 'wordHoldSec', 'glossaryHighlight'] },
-  { id: 'library', name: 'Library view & sorting', hint: 'grid / list, sort orders, group by, series sets', keys: ['view', 'sort', 'lastAutoSort', 'defaultSort', 'sorts', 'groupBy', 'groupSets', 'showFinished', 'setSort'] },
+  { id: 'reading', name: 'Reading behaviour', hint: 'Pages / Scroll, tap zones, footer, pinch, hold time', keys: ['flow', 'tapZones', 'footerPages', 'footerLeft', 'hideScrub', 'pinchSens', 'holdSec', 'wordLookup', 'wordHoldSec', 'glossaryHighlight'] },
+  { id: 'library', name: 'Library view & sorting', hint: 'grid / list, sort orders, group by, series sets', keys: ['view', 'sort', 'lastAutoSort', 'defaultSort', 'sorts', 'groupBy', 'groupSets', 'setGroups', 'showFinished', 'setSort'] },
   { id: 'audio', name: 'Audiobooks', hint: 'playback speed', keys: ['audioSpeed'] },
   { id: 'other', name: 'Other', hint: 'public library, auto-link, auto-enrich', keys: ['publicLibrary', 'autoEnrich', 'autoPair'] },
 ];
-const NESTED = ['sorts'];   // object-valued settings whose entries are stamped one by one ('sorts/shelf:abc')
+export const NESTED = ['sorts', 'setGroups'];   // object-valued settings whose entries are stamped one by one ('sorts/shelf:abc')
 const KEYAT = 'flimsy.settings.keyAt', EXCL = 'flimsy.sync.deviceOnly';
 const readJ = (k, d) => { try { return JSON.parse(localStorage.getItem(k) || 'null') ?? d; } catch { return d; } };
 /** Group ids the user keeps device-specific. */
@@ -133,6 +135,9 @@ export function setSort(ctxKey, patch) {
 }
 export function clearSort(ctxKey) { const o = { ...(state.sorts || {}) }; delete o[ctxKey]; settings.set({ sorts: o }); }
 export function resetAllSorts() { settings.set({ sorts: {} }); }
+/** Are series grouped into set tiles in this view ('shelf:all', 'shelf:finished', 'shelf:<id>')? Its own choice, else the global default (groupSets). */
+export function setsGrouped(ctxKey) { const o = (state.setGroups || {})[ctxKey]; return o == null ? !!state.groupSets : !!o; }
+export function setSetsGrouped(ctxKey, v) { const o = { ...(state.setGroups || {}) }; if (v == null) delete o[ctxKey]; else o[ctxKey] = !!v; settings.set({ setGroups: o }); }
 export function setDefaultSort(patch) { const d = state.defaultSort || { field: 'recent', dir: 'desc' }; const field = patch.field || d.field; settings.set({ defaultSort: { field, dir: patch.dir || (patch.field ? DEFAULT_DIR[field] : d.dir) } }); }
 
 try { const saved = JSON.parse(localStorage.getItem('flimsy.settings') || '{}'); if (!saved.defaultSort && saved.sort && saved.sort !== 'custom' && DEFAULT_DIR[saved.sort]) state.defaultSort = { field: saved.sort, dir: DEFAULT_DIR[saved.sort] }; } catch { /* ignore */ }
@@ -156,7 +161,7 @@ export function applyUI() {
 try {
   if (localStorage.getItem(KEYAT) === null) {
     const legacy = +(localStorage.getItem('flimsy.settings.at') || 0), at = {};
-    if (legacy) for (const k of Object.keys(DEFAULTS)) { if (k === 'sorts') { for (const c of Object.keys(state.sorts || {})) at['sorts/' + c] = legacy; } else if (!jeq(state[k], DEFAULTS[k])) at[k] = legacy; }
+    if (legacy) for (const k of Object.keys(DEFAULTS)) { if (NESTED.includes(k)) { for (const c of Object.keys(state[k] || {})) at[k + '/' + c] = legacy; } else if (!jeq(state[k], DEFAULTS[k])) at[k] = legacy; }
     localStorage.setItem(KEYAT, JSON.stringify(at));
   }
 } catch { /* ignore */ }

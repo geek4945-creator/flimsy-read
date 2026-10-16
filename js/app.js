@@ -1,6 +1,6 @@
 import { syncDetails, statusLine } from './syncui.js';
 import { backupSettingsSection } from './backupui.js';
-import { h, $, $$, toast, sheet, confirmDlg } from './util.js';
+import { h, $, $$, toast, sheet, confirmDlg, initClearButtons } from './util.js';
 import { settings, applyUI, THEMES, FONTS, FONT_MIN, FONT_MAX, FONT_STEP, clampPt, SORT_FIELDS, setDefaultSort, resetAllSorts, dirWord } from './settings.js';
 import { KINDLE_TYPE_RE } from './kindle.js';
 import { renderLibrary, importFiles, deleteAllBooksFlow } from './library.js';
@@ -17,9 +17,10 @@ import { initFullscreen, fsButton } from './fullscreen.js';
 import { isInstalledApp } from './env.js';
 import { normalizeUrl } from './net.js';
 import { enrichSettingsSection, openFixMissing } from './enrich.js';
-import { footerToggles } from './pages.js';
+import { footerToggles, scrubToggle } from './pages.js';
 import { initViewport } from './viewport.js';
 import { initNav, noteTab } from './nav.js';
+import { renderReadingNow } from './readingnow.js';
 import { PINCH_LABELS } from './pinch.js';
 import { initHold, holdSeconds, HOLD_MIN, HOLD_MAX } from './hold.js';
 import { wordHoldSeconds, HOLD_MIN as WHOLD_MIN, HOLD_MAX as WHOLD_MAX, highlightSupported } from './wordbubble.js';
@@ -38,6 +39,7 @@ async function show(t) {
   $$('.tab').forEach((b) => b.classList.toggle('on', b.dataset.tab === t));
   view.scrollTop = 0; view.dataset.screen = t;
   if (t === 'library') await renderLibrary(view);
+  else if (t === 'reading') await renderReadingNow(view);
   else if (t === 'audiobooks') await renderAudiobooks(view);
   else if (t === 'catalogs') await renderCatalogs(view);
   else renderSettings();
@@ -48,7 +50,8 @@ $('#file-input').addEventListener('change', async (e) => { const files = [...e.t
 $('#audio-input').addEventListener('change', async (e) => { const files = [...e.target.files]; e.target.value = ''; if (files.length) await handleAudioFiles(files); });
 $('#audio-folder-input').addEventListener('change', async (e) => { const files = [...e.target.files]; e.target.value = ''; if (files.length) await handleAudioFiles(files, { ask: false }); });
 onAudioChange(() => { if (tab === 'audiobooks' && !$('#overlay').children.length) renderAudiobooks(view); });
-onLibraryChange(() => { if (tab === 'library' && !currentReader() && !$('#overlay').children.length) renderLibrary(view); });
+onLibraryChange(() => { if (tab === 'library' && !currentReader() && !$('#overlay').children.length) renderLibrary(view); else if (tab === 'reading' && !currentReader() && !$('#overlay').children.length) renderReadingNow(view); });
+window.addEventListener('folio-library-refresh', () => { if (tab === 'reading' && !currentReader()) renderReadingNow(view); });
 settings.onChange((p) => { if (tab === 'settings' && ('theme' in p)) renderSettings(); });
 
 /* ---------- Settings tab ---------- */
@@ -78,7 +81,7 @@ function renderSettings() {
       sample),
     h('section', { class: 'pad card-sec', id: 'sec-footer' }, h('h3', null, 'Reader footer'),
       h('p', { class: 'muted small' }, 'The line at the bottom of the reader. EPUB page counts follow your text size, margins and line spacing; PDFs use their real page numbers.'),
-      ...footerToggles()),
+      ...footerToggles(), scrubToggle()),
     h('section', { class: 'pad card-sec', id: 'sec-display' }, h('h3', null, 'App & display'),
       isInstalledApp() ? h('p', { class: 'muted small' }, 'You’re running Flimsy as an installed app, already full screen.') : h('p', { class: 'muted small' }, 'Put Flimsy on your Home Screen for an app icon and full-screen reading, or hide the browser bars with Full screen.'),
       h('div', { class: 'row-actions' },
@@ -179,4 +182,5 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   navigator.serviceWorker.register('sw.js').catch((e) => console.warn('SW registration failed', e));
 }
 // Test hook
+initClearButtons();
 window.__flimsy = { show, settings, G };
