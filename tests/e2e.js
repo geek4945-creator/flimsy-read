@@ -8,6 +8,7 @@ const assert = (c, m) => { if (!c) throw new Error(m || 'assertion failed'); };
 
 async function newPage(browser, ctx) {
   const page = await ctx.newPage();
+  await page.evaluateOnNewDocument(() => { if (!localStorage.getItem('flimsy.settings')) localStorage.setItem('flimsy.settings', JSON.stringify({ flow: 'paginated', flowChosen: true })); });   // these tests drive page turns: seed the explicit Pages choice (the default is Scroll since v0.5.2)
   await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   page.errs = []; page.on('pageerror', (e) => page.errs.push(e.message)); page.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) page.errs.push('console: ' + m.text()); });
   return page;
@@ -38,6 +39,7 @@ const frameInfo = (page) => page.evaluate(() => { const f = document.querySelect
   await step('Import 5 EPUBs via file picker (metadata + covers extracted)', async () => {
     await (await page.$('#file-input')).uploadFile(...['frankenstein', 'saga-1', 'saga-2', 'saga-3', 'standalone'].map(fx));
     await page.waitForFunction(() => document.querySelectorAll('.tile').length >= 3, { timeout: 15000 });
+    await page.waitForFunction(() => document.querySelectorAll('.tile img.cover-img').length >= 3, { timeout: 20000 }).catch(() => {});
     const info = await page.evaluate(() => ({ tiles: [...document.querySelectorAll('.tile')].map((t) => t.querySelector('.t').innerText), covers: document.querySelectorAll('.tile img.cover-img').length }));
     assert(info.covers >= 3, 'covers: ' + JSON.stringify(info)); return JSON.stringify(info);
   });

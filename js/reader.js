@@ -5,6 +5,7 @@ import * as S from './store.js';
 import { fsButton } from './fullscreen.js';
 import { openPdf, closePdf, pdfCurrent } from './pdfreader.js';
 import { blockZoom } from './viewport.js';
+import { attachPinch } from './pinch.js';
 import { makeFooter, applyFooterSettings, paintFooter, createPager, footerToggles } from './pages.js';
 import { makeLoading, withTimeout, patchBook } from './openguard.js';
 
@@ -39,6 +40,7 @@ export async function openReader(id, opts = {}) {
 
   import('./audiostore.js').then((A) => A.getAudiobooks()).then((l) => { const b = document.getElementById('r-link'); if (b && l.length) b.hidden = false; }).catch(() => {});   // the 🎧 button only appears once there is an audiobook to link
   cur = { book, viewer, slider, label, bmBtn, ovr, el, chrome: true, top, bottom, saveTimer: null, finishedThisSession: false, bookmarks: await S.getBookmarks(id), loc: null, ready: false };
+  attachPinch(viewer, pinchHost);   // spread / pinch over the margins (inside the page it is attached per EPUB frame)
   const mine = cur; const alive = () => cur === mine && !mine.closed;
   try {
     loading.stage(book.size > 60 * 1048576 ? 'Reading a large book (' + Math.round(book.size / 1048576) + ' MB), this can take a while…' : 'Reading the book file…'); const buf = await withTimeout(blob.arrayBuffer(), 20000, 'reading the file from storage'); if (!alive()) return;
@@ -99,14 +101,15 @@ async function startRendition(cfi) {
   let tx = null;
   r.on('touchstart', (e) => { tx = e.changedTouches ? [e.changedTouches[0].screenX, e.changedTouches[0].screenY] : null; });
   r.on('touchend', (e) => {
-    if (!tx || settings.get('flow') === 'scrolled' || !e.changedTouches) return;
+    if (!tx || settings.get('flow') === 'scrolled' || !e.changedTouches || justPinched()) return;
     const dx = e.changedTouches[0].screenX - tx[0], dy = e.changedTouches[0].screenY - tx[1];
     if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) { dx < 0 ? r.next() : r.prev(); e.__swiped = true; swipedAt = Date.now(); }
   });
   await r.display(cfi);
   if (scrolled) {   // keep "Page X of Y" live while scrolling
     const k = r.manager && r.manager.container; let raf = 0;
-    if (k) k.addEventListener('scroll', () => { if (raf) return; raf = requestAnimationFrame(() => { raf = 0; if (c.rendition === r && c.pager) c.pager.update(); }); }, { passive: true });
+    let settle = 0;
+    if (k) k.addEventListener('scroll', () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; if (c.rendition === r && c.pager) c.pager.update(); }); clearTimeout(settle); settle = setTimeout(() => { if (c.rendition === r) syncScrollLoc(); }, 250); }, { passive: true });
   }
   if (c.pager) c.pager.settle(300);
   if (cfi && !scrolled) {   // epub.js can land one page early when the saved CFI is the first character of a page
@@ -121,6 +124,7 @@ function onTap(e) {
   if (Date.now() - swipedAt < 400) return;
   try { if (e.view.getSelection().toString()) return; } catch { /* ignore */ }
   if (e.target && e.target.closest && e.target.closest('a[href]')) return;
+  if (justPinched()) return;
   const c = cur; const frame = e.view.frameElement; const vr = c.viewer.getBoundingClientRect();
   const x = (frame ? frame.getBoundingClientRect().left : vr.left) + e.clientX; const ratio = (x - vr.left) / vr.width;
   const mode = settings.get('tapZones'); const scrolled = settings.get('flow') === 'scrolled';
@@ -143,7 +147,7 @@ function onHide() { if (document.hidden && cur) savePosition(true); }
 
 /* ----- styles ----- */
 function buildCss() {
-  const c = cur; const st = S.effectiveStyle(c.book); const t = THEMES[settings.get('theme')] || THEMES.light;
+  const c = cur; const st = { ...S.effectiveStyle(c.book) }; if (c.previewPt != null) st.fontSizePt = c.previewPt; const t = THEMES[settings.get('theme')] || THEMES.light;
   const ff = FONTS[st.font]?.css || '';
   return `
 html, body { touch-action: manipulation; }
@@ -160,8 +164,25 @@ img, svg, video { max-width: 100% !important; height: auto; ${t.dark ? 'opacity:
 pre, code, kbd, samp { font-family: Menlo, Consolas, monospace !important; font-size: .9em !important; }
 `;
 }
+/** Pinch → text size: the same value the Aa panel would set (this book's own size if it has one, else the global size). */
+const pinchHost = {
+  getPt: () => (cur ? S.effectiveStyle(cur.book).fontSizePt : settings.get('fontSizePt')),
+  pinched: () => { if (cur) cur.pinchedAt = Date.now(); },
+  apply: (pt, final) => {
+    const c = cur; if (!c) return;
+    if (!final) {   // live preview: restyle the open pages only. A full re-layout / re-render mid-gesture would replace the iframe the fingers are on and cut the gesture off.
+      c.previewPt = pt; try { c.rendition.getContents().forEach(injectStyle); } catch { /* ignore */ } return;
+    }
+    c.previewPt = null;
+    if (c.book.overrides && c.book.overrides.fontSizePt != null) {
+      c.book.overrides = { ...c.book.overrides, fontSizePt: pt }; applyAppearance();
+      S.setOverride(c.book.id, { fontSizePt: pt }).then((b) => { if (cur === c) c.book = b; });
+    } else settings.set({ fontSizePt: pt });
+  },
+};
+const justPinched = () => cur && cur.pinchedAt && Date.now() - cur.pinchedAt < 600;
 function injectStyle(contents) {
-  try { blockZoom(contents.document); } catch { /* ignore */ }
+  try { blockZoom(contents.document); attachPinch(contents.document, pinchHost); } catch { /* ignore */ }
   try {
     const d = contents.document; let el = d.getElementById('flimsy-user-style');
     if (!el) { el = d.createElement('style'); el.id = 'flimsy-user-style'; d.head.appendChild(el); }
@@ -193,7 +214,7 @@ function chapterOf(loc) {
   try { const it = cur.epub.navigation.get(loc.start.href); if (it) return (it.label || '').trim(); } catch { /* ignore */ }
   return '';
 }
-function updateProgress(loc) {
+function updateProgress(loc, noSave) {
   const c = cur; if (!c) return;
   let p = 0;
   if (c.locReady) p = c.epub.locations.percentageFromCfi(loc.start.cfi) || 0;
@@ -205,10 +226,16 @@ function updateProgress(loc) {
   c.label.textContent = fmtPct(p) + (chap ? ' · ' + chap : '');
   c.curChapter = chap;
   refreshBookmarkStar();
-  savePositionSoon(loc);
+  if (!noSave) savePositionSoon(loc);
+}
+/** Continuous scroll: epub.js does not always report `relocated` while the reader scrolls, so read the position from the rendition ourselves. */
+function syncScrollLoc(noSave) {
+  const c = cur; if (!c || !c.rendition || c.closed || c.rendition.settings.flow !== 'scrolled') return;
+  try { const l = c.rendition.currentLocation(); if (l && l.start && l.start.cfi) { c.loc = l; updateProgress(l, noSave); c.pager && c.pager.update(l); } } catch { /* ignore */ }
 }
 const savePositionSoon = debounce(() => savePosition(), 500);
 async function savePosition() {
+  syncScrollLoc(true);
   const c = cur; if (!c || !c.loc) return;
   const b = await S.getBook(c.book.id); if (!b) return;
   b.cfi = c.loc.start.cfi; b.progress = c.progress; b.lastOpened = Date.now();

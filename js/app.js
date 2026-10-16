@@ -17,6 +17,9 @@ import { normalizeUrl } from './net.js';
 import { enrichSettingsSection, openFixMissing } from './enrich.js';
 import { footerToggles } from './pages.js';
 import { initViewport } from './viewport.js';
+import { initNav, noteTab } from './nav.js';
+import { PINCH_LABELS } from './pinch.js';
+import { initHold, holdSeconds, HOLD_MIN, HOLD_MAX } from './hold.js';
 import { pairSettingsSection, pairNotify } from './findplace.js';
 import { startAutoPair } from './links.js';
 import { handleSharedCover } from './covers.js';
@@ -26,7 +29,7 @@ let tab = localStorage.getItem('flimsy.tab') || 'library';
 const view = $('#view');
 
 async function show(t) {
-  tab = t; localStorage.setItem('flimsy.tab', t);
+  noteTab(t); tab = t; localStorage.setItem('flimsy.tab', t);
   $$('.tab').forEach((b) => b.classList.toggle('on', b.dataset.tab === t));
   view.scrollTop = 0; view.dataset.screen = t;
   if (t === 'library') await renderLibrary(view);
@@ -66,6 +69,7 @@ function renderSettings() {
       slider('Line spacing', 'lineHeight', 1, 2.4, 0.05, (v) => v.toFixed(2)), slider('Margins', 'margin', 0, 80, 2, (v) => v + ' px'),
       h('div', { class: 'row-ctl' }, h('label', null, 'Reading layout')),
       h('div', { class: 'seg wide' }, [['paginated', 'Pages'], ['scrolled', 'Scroll']].map(([v, n]) => h('button', { class: s.flow === v ? 'on' : '', onclick: () => { settings.set({ flow: v }); renderSettings(); } }, n))),
+      h('div', { class: 'row-ctl' }, h('label', null, 'Pinch sensitivity ', h('small', { class: 'muted' }, 'pinch in the reader changes the text size')), h('div', { class: 'seg wide', id: 'pinch-seg' }, PINCH_LABELS.map(([v, n]) => h('button', { class: s.pinchSens === v ? 'on' : '', 'data-pinch': v, onclick: () => { settings.set({ pinchSens: v }); renderSettings(); } }, n)))),
       sample),
     h('section', { class: 'pad card-sec', id: 'sec-footer' }, h('h3', null, 'Reader footer'),
       h('p', { class: 'muted small' }, 'The line at the bottom of the reader. EPUB page counts follow your text size, margins and line spacing; PDFs use their real page numbers.'),
@@ -77,6 +81,11 @@ function renderSettings() {
         fsButton({ class: 'btn', id: 'settings-fs' }))),
     h('section', { class: 'pad card-sec' }, h('h3', null, 'Help: getting books'),
       h('div', { class: 'row-actions' }, h('button', { class: 'btn', id: 'help-public-library', onclick: () => openPublicLibraryGuide() }, 'Public library guide'), h('button', { class: 'btn', id: 'help-drmfree', onclick: () => openDrmFreeHelp() }, 'Where to get DRM-free books'))),
+    h('section', { class: 'pad card-sec', id: 'sec-hold' }, h('h3', null, 'Press and hold'),
+      h('p', { class: 'muted small' }, 'Press and hold a book (or audiobook) in the Library for this long to open its ⋯ menu. Moving your finger, scrolling or letting go cancels it.'),
+      (() => { const out = h('span', { class: 'muted', id: 'hold-sec-val' }, holdSeconds().toFixed(1) + ' s');
+        const r = h('input', { type: 'range', id: 'hold-sec', min: HOLD_MIN, max: HOLD_MAX, step: 0.5, value: holdSeconds(), oninput: (e) => { out.textContent = (+e.target.value).toFixed(1) + ' s'; settings.set({ holdSec: +e.target.value }); } });
+        return h('div', { class: 'row-ctl' }, h('label', { for: 'hold-sec' }, 'Hold time'), r, out); })()),
     h('section', { class: 'pad card-sec' }, h('h3', null, 'Library sorting'),
       h('p', { class: 'muted small' }, 'Each shelf (All, Currently Reading, Want to Read, Finished, your own shelves) and each set remembers its own sort. This default applies to any that don’t have one yet.'),
       h('div', { class: 'row-ctl' }, h('label', null, 'Default sort'),
@@ -142,16 +151,15 @@ window.addEventListener('drop', async (e) => {
 });
 
 /* ---------- boot ---------- */
-initViewport();
+initViewport(); initHold();
 window.addEventListener('db-blocked', () => toast('Flimsy is finishing an update. Close any other Flimsy tab or window and reopen the app.', 8000));
 G.initSync();
-show(tab);
+show(tab); initNav({ getTab: () => tab, show });
 initInstall(); initFullscreen(); initPlayerUI(); startAutoPair(pairNotify);
 if (new URLSearchParams(location.search).get('share') === 'cover') setTimeout(() => handleSharedCover(), 400);
 navigator.storage?.persist?.();
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   navigator.serviceWorker.register('sw.js').catch((e) => console.warn('SW registration failed', e));
 }
-window.addEventListener('popstate', () => { if (currentReader()) closeReader(); });
 // Test hook
 window.__flimsy = { show, settings, G };
