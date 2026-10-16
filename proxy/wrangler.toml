@@ -1,0 +1,9 @@
+name = "flimsy-proxy"
+main = "worker.js"
+compatibility_date = "2024-09-01"
+
+[vars]
+# Comma-separated extra hosts (your own Calibre-Web / OPDS server). Default catalogs are already allowed.
+ALLOW_HOSTS = ""
+# Comma-separated allowed origins: the GitHub Pages site plus the Android (Capacitor) app origins
+ALLOW_ORIGIN = "https://geek4945-creator.github.io,https://localhost,http://localhost,capacitor://localhost"

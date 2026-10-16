@@ -1,0 +1,7 @@
+{
+  "appId": "com.flimsyread.app",
+  "appName": "Flimsy Read",
+  "webDir": "www",
+  "server": { "androidScheme": "https" },
+  "android": { "allowMixedContent": false }
+}

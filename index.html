@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Flimsy Read</title>
+<meta name="description" content="A private, offline-capable ebook reader.">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0f3d3e" id="meta-theme">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Flimsy">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div id="app">
+  <main id="view" aria-live="polite"></main>
+  <div id="miniplayer" hidden></div>
+  <nav id="tabbar" aria-label="Main">
+    <button data-tab="library" class="tab"><span class="ico">&#128218;</span><span>Library</span></button>
+    <button data-tab="audiobooks" class="tab"><span class="ico">&#127911;</span><span>Audiobooks</span></button>
+    <button data-tab="catalogs" class="tab"><span class="ico">&#127760;</span><span>Catalogs</span></button>
+    <button data-tab="settings" class="tab"><span class="ico">&#9881;&#65039;</span><span>Settings</span></button>
+  </nav>
+</div>
+<div id="reader" hidden></div>
+<div id="audioplayer" hidden></div>
+<div id="overlay" hidden></div>
+<div id="toast" hidden></div>
+<input type="file" id="file-input" accept=".epub,.pdf,application/pdf,.mobi,.azw,.azw3,.kf8,application/epub+zip,application/x-mobipocket-ebook,application/vnd.amazon.ebook" multiple hidden>
+<input type="file" id="audio-input" accept="audio/*,.mp3,.m4a,.m4b,.aac,.ogg,.oga,.opus,.flac,.wav,.zip,.aax,.aaxc,.aa,.m4p" multiple hidden>
+<input type="file" id="audio-folder-input" webkitdirectory multiple hidden>
+<script src="config.js"></script>
+<script src="vendor/jszip.min.js"></script>
+<script src="vendor/epub.min.js"></script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
