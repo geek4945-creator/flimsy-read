@@ -23,7 +23,7 @@ const sync = (p, opts = {}) => p.evaluate(async (o) => { const g = await import(
 const mkBook = (p, title, status = 'want') => p.evaluate(async (title, status) => { const b = await window.__mk({ title, author: 'Ann Author' }); const S = await import('./js/store.js'); const x = await S.getBook(b.id); x.status = status; await S.saveBook(x); return b.id; }, title, status);
 const setOf = (p, name) => p.evaluate(async (name) => { const S = await import('./js/store.js'); return (await S.getSets()).find((s) => s.name.toLowerCase() === name.toLowerCase())?.id || null; }, name);
 const mkSet = (p, name, titles, auto = false) => p.evaluate(async (name, titles, auto) => { const S = await import('./js/store.js'); const set = auto ? await S.ensureSet(name, true) : await S.createSet(name); const bs = await S.getBooks(); let i = 1; for (const t of titles) { const b = bs.find((x) => x.title === t); await S.assignSet(b.id, set.id, i++); } return set.id; }, name, titles, auto);
-const show = async (p) => { await p.evaluate(() => window.__folio.show('library')); await sleep(500); };
+const show = async (p) => { await p.evaluate(() => (window.__flimsy || window.__folio).show('library')); await sleep(500); };
 const titlesIn = (p) => p.$$eval('.tiles .tile .t', (e) => e.map((x) => x.innerText));
 const sections = (p) => p.$$eval('.tiles', (gs) => Object.fromEntries(gs.map((g) => [g.dataset.group || 'x', [...g.querySelectorAll('.tile .t')].map((x) => x.innerText)])));
 const setSort = (p, key, field) => p.evaluate(async (key, field) => { (await import('./js/settings.js')).setSort(key, { field }); }, key, field);
