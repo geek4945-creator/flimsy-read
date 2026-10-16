@@ -6,7 +6,7 @@ const APP = process.env.URL || 'http://localhost:8765/index.html'; const fx = (n
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms)); const results = [];
 async function step(name, fn) { try { const v = await fn(); results.push([true, name]); console.log('PASS', name, v === undefined ? '' : '→ ' + v); } catch (e) { results.push([false, name, e.message]); console.log('FAIL', name, '→', e.message); } }
 const assert = (c, m) => { if (!c) throw new Error(m || 'assertion failed'); };
-const PFX = /flimsy/i.test(APP) ? 'flimsy' : 'folio';
+const PFX = 'flimsy';
 execSync(`node ${path.join(__dirname, 'make-words-epubs.js')} /tmp/words-epubs`, { stdio: 'ignore' }); const ONE = '/tmp/words-epubs/ash-one.epub', TWO = '/tmp/words-epubs/ash-two.epub';
 const S = makeState(); const C = S.cloud;
 const DEFS = {
