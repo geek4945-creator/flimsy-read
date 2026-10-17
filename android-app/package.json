@@ -1,6 +1,6 @@
 {
   "name": "flimsy-read-android",
-  "version": "0.5.11",
+  "version": "0.5.12",
   "private": true,
   "description": "Capacitor wrapper that packages the Flimsy Read PWA as an Android APK",
   "scripts": {
