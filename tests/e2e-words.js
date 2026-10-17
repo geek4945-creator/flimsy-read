@@ -68,6 +68,7 @@ S.dict = { calls: [], serendipityApiDown: true, reply(u) {
   await step('A quick tap or a drag does not open the bubble; the setting turns it off; hold time is adjustable', async () => {
     const p = await wordXY(A, 'ephemeral'); await A.mouse.move(p.x, p.y); await A.mouse.down(); await sleep(120); await A.mouse.up(); await sleep(900); await noBubble(A);
     await A.mouse.move(p.x, p.y); await A.mouse.down(); await A.mouse.move(p.x + 40, p.y + 30, { steps: 4 }); await sleep(1000); await A.mouse.up(); await noBubble(A);
+    await A.evaluate(() => window.__reader.rendition.getContents().forEach((k) => k.window.getSelection().removeAllRanges())); await sleep(500);   // v0.5.8: a mouse drag selects text (selection menu); clear it so it doesn't sit on the word
     await A.evaluate(async () => (await import('./js/settings.js')).settings.set({ wordLookup: false })); await holdWord(A, 'ephemeral', 1100); await sleep(300); await noBubble(A);
     await A.evaluate(async () => (await import('./js/settings.js')).settings.set({ wordLookup: true, wordHoldSec: 0.3 })); await holdWord(A, 'ephemeral', 450); await waitBubble(A);
     await A.evaluate(() => window.__flimsyBack()); await A.evaluate(async () => (await import('./js/settings.js')).settings.set({ wordHoldSec: 0.7 }));
